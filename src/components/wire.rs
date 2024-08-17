@@ -15,7 +15,7 @@ impl CircuitElement for Wire {
         Box::new(Wire { pos, size, id })
     }
 
-    fn draw(&self, ui: &mut egui::Ui, stroke: Stroke, grid_step: f32, screen_pos: Pos2, screen_size: Vec2) {
+    fn draw(&mut self, ui: &mut egui::Ui, stroke: Stroke, grid_step: f32, screen_pos: Pos2, screen_size: Vec2) {
         ui.painter().line_segment([screen_pos, screen_pos + screen_size], stroke);
     }
 
@@ -37,5 +37,9 @@ impl CircuitElement for Wire {
 
     fn get_type(&self) -> ElementType {
         ElementType::Wire
+    }
+
+    fn shorted(&self) -> bool {
+        true
     }
 }

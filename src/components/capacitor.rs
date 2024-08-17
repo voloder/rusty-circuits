@@ -14,7 +14,7 @@ impl CircuitElement for Capacitor {
         Box::new(Capacitor { pos, size, id })
     }
 
-    fn draw(&self, ui: &mut egui::Ui, stroke: Stroke, grid_step: f32, screen_pos: Pos2, screen_size: Vec2) {
+    fn draw(&mut self, ui: &mut egui::Ui, stroke: Stroke, grid_step: f32, screen_pos: Pos2, screen_size: Vec2) {
         let center = screen_pos + screen_size / 2.0;
 
         let normalized = Vec2::new(screen_size.x, screen_size.y) / screen_size.length();

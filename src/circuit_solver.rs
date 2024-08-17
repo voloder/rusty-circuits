@@ -1,26 +1,37 @@
-use std::collections::{HashMap, HashSet};
-use crate::{CircuitElement, ElementType, Node};
-use itertools::Itertools;
+use std::collections::{HashMap, HashSet, BTreeSet, BTreeMap};
+use crate::{CircuitElement, Node};
 
+// does the following things:
+// - remove dangling nodes and elements
+// - simplify wires (interconnected wires should be a single node)
 pub fn simplify_graph(
     nodes: &mut Vec<Node>,
-    elements: &mut HashMap<u32, Box<dyn CircuitElement>>,
-) {
-    println!("------ Simplifying graph ------ ");
+    elements: &mut BTreeMap<u32, Box<dyn CircuitElement>>,
+    debug_info: &mut String,
+) -> BTreeMap<u32, BTreeSet<u32>> {
     let mut pass = 0;
     let mut changed = true;
+
+    // todo map
+    let mut nodes_map: BTreeMap<u32, BTreeSet<u32>> = BTreeMap::new();
+
     while changed {
         pass += 1;
 
-        println!("Pass {}:", pass);
+        *debug_info += format!("\nPass {}:\n", pass).as_str();
+
         changed = false;
+
+        let nodes_clone = nodes.clone();
+
         // remove dangling nodes
         let len_old = nodes.len();
         nodes.retain(|node| {
             node.connections.len() > 1
         });
+
         if nodes.len() != len_old {
-            println!("Removed {} dangling nodes", len_old - nodes.len());
+            *debug_info += format!("Removed {} dangling nodes\n", len_old - nodes.len()).as_str();
             changed = true;
         }
 
@@ -33,7 +44,7 @@ pub fn simplify_graph(
         });
 
         if elements.len() != len_old {
-            println!("Removed {} elements", len_old - elements.len());
+            *debug_info += format!("Removed {} elements\n", len_old - elements.len()).as_str();
             changed = true;
         }
 
@@ -46,11 +57,10 @@ pub fn simplify_graph(
                 })
             });
             if node.connections.len() != len_old {
-                println!("Removed {} connections in node {}", len_old - node.connections.len(), node.id);
+                *debug_info += format!("Removed {} connections in node {}\n", len_old - node.connections.len(), node.id).as_str();
                 changed = true;
             }
         }
-
         // simplify wires
         let mut nodes_to_remove = HashSet::new();
         let mut node_connections: HashMap<u32, Vec<u32>> = HashMap::new();
@@ -79,8 +89,8 @@ pub fn simplify_graph(
 
                 for connection in common_connections {
                     if let Some(element) = elements.get(&connection) {
-                        if element.get_type() == ElementType::Wire {
-                            println!("Merging node {} -> {}", other.id, node.id);
+                        if element.shorted() {
+                            *debug_info += format!("Merging node {} -> {}\n", other.id, node.id).as_str();
 
                             node_connections.entry(node.id)
                                 .or_default()
@@ -100,11 +110,19 @@ pub fn simplify_graph(
                 node.connections.extend(connections);
                 node.connections.sort();
                 node.connections.dedup();
-                println!("Updated node {} connections: {:?}", node.id, node.connections);
+                *debug_info += format!("Updated node {} connections: {:?}\n", node.id, node.connections).as_str();
             }
         }
 
         // remove nodes
-        nodes.retain(|node| !nodes_to_remove.contains(&node.id));
+        nodes.retain(|node| {
+            !nodes_to_remove.contains(&node.id)
+        });
+
+        if !changed {
+            *debug_info += "Nothing to do\n";
+        }
     }
+
+    nodes_map
 }
