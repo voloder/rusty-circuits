@@ -22,45 +22,6 @@ pub fn simplify_graph(
 
         changed = false;
 
-        let nodes_clone = nodes.clone();
-
-        // remove dangling nodes
-        let len_old = nodes.len();
-        nodes.retain(|node| {
-            node.connections.len() > 1
-        });
-
-        if nodes.len() != len_old {
-            *debug_info += format!("Removed {} dangling nodes\n", len_old - nodes.len()).as_str();
-            changed = true;
-        }
-
-        // remove elements that are not connected to any nodes
-        let len_old = elements.len();
-        elements.retain(|id, element| {
-            nodes.iter().filter(|node| {
-                node.connections.contains(&id)
-            }).take(2).count() > 1
-        });
-
-        if elements.len() != len_old {
-            *debug_info += format!("Removed {} elements\n", len_old - elements.len()).as_str();
-            changed = true;
-        }
-
-        // remove connections in nodes whose elements were removed
-        for node in nodes.iter_mut() {
-            let len_old = node.connections.len();
-            node.connections.retain(|connection| {
-                elements.keys().any(|id| {
-                    *id == *connection
-                })
-            });
-            if node.connections.len() != len_old {
-                *debug_info += format!("Removed {} connections in node {}\n", len_old - node.connections.len(), node.id).as_str();
-                changed = true;
-            }
-        }
         // simplify wires
         let mut nodes_to_remove = HashSet::new();
         let mut node_connections: HashMap<u32, Vec<u32>> = HashMap::new();
@@ -92,6 +53,24 @@ pub fn simplify_graph(
                         if element.shorted() {
                             *debug_info += format!("Merging node {} -> {}\n", other.id, node.id).as_str();
 
+                            nodes_map.entry(node.id).or_default().insert(other.id);
+
+                            if let Some(set) = nodes_map.remove(&other.id){
+                                *debug_info += format!("Set: {:?}\n", set).as_str();
+                                nodes_map.entry(node.id).or_default().extend(set);
+                            }
+
+
+                            for element in elements.values_mut() {
+                                element.set_nodes(element.get_nodes().iter().map(|node_id| {
+                                    if *node_id == other.id {
+                                        node.id
+                                    } else {
+                                        *node_id
+                                    }
+                                }).collect());
+                            }
+
                             node_connections.entry(node.id)
                                 .or_default()
                                 .extend(other.connections.iter().copied());
@@ -108,8 +87,6 @@ pub fn simplify_graph(
         for node in nodes.iter_mut() {
             if let Some(connections) = node_connections.remove(&node.id) {
                 node.connections.extend(connections);
-                node.connections.sort();
-                node.connections.dedup();
                 *debug_info += format!("Updated node {} connections: {:?}\n", node.id, node.connections).as_str();
             }
         }
@@ -118,6 +95,45 @@ pub fn simplify_graph(
         nodes.retain(|node| {
             !nodes_to_remove.contains(&node.id)
         });
+
+        // remove dangling nodes
+        /*let len_old = nodes.len();
+        nodes.retain(|node| {
+            node.connections.len() > 1
+        });
+
+        if nodes.len() != len_old {
+            *debug_info += format!("Removed {} dangling nodes\n", len_old - nodes.len()).as_str();
+            changed = true;
+        }*/
+
+        // remove elements that are not connected to any nodes
+        let len_old = elements.len();
+        elements.retain(|id, element| {
+            nodes.iter().filter(|node| {
+                node.connections.contains(&id)
+            }).take(2).count() > 1
+        });
+
+        if elements.len() != len_old {
+            *debug_info += format!("Removed {} elements\n", len_old - elements.len()).as_str();
+            changed = true;
+        }
+
+        // remove connections in nodes whose elements were removed
+        for node in nodes.iter_mut() {
+            let len_old = node.connections.len();
+            node.connections.retain(|connection| {
+                elements.keys().any(|id| {
+                    *id == *connection
+                })
+            });
+            if node.connections.len() != len_old {
+                *debug_info += format!("Removed {} connections in node {}\n", len_old - node.connections.len(), node.id).as_str();
+                changed = true;
+            }
+        }
+
 
         if !changed {
             *debug_info += "Nothing to do\n";

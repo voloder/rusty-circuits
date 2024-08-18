@@ -1,21 +1,24 @@
+use std::collections::{BTreeMap, HashMap};
+use std::collections::hash_map::Values;
 use eframe::egui;
 use eframe::egui::{Pos2, Rect, Stroke, Vec2};
-use crate::{CircuitElement, ElementType};
+use crate::{CircuitElement, ElementType, Node};
 
 #[derive(Clone, Debug)]
 pub struct DCVoltageSource {
     pos: Pos2,
     size: Vec2,
     id: u32,
+    nodes: Vec<u32>
 }
 
 
 impl CircuitElement for DCVoltageSource {
-    fn new_boxed(pos: Pos2, size: Vec2, id: u32) -> Box<dyn CircuitElement> {
-        Box::new(DCVoltageSource { pos, size, id })
+    fn new_boxed(pos: Pos2, size: Vec2, id: u32, nodes: Vec<u32>) -> Box<dyn CircuitElement> {
+        Box::new(DCVoltageSource { pos, size, id, nodes })
     }
 
-    fn draw(&mut self, ui: &mut egui::Ui, stroke: Stroke, grid_step: f32, screen_pos: Pos2, screen_size: Vec2) {
+    fn draw(&mut self, ui: &mut egui::Ui, stroke: Stroke, grid_step: f32, screen_pos: Pos2, screen_size: Vec2, nodes: &HashMap<(i32, i32), Node>) {
         let center = screen_pos + screen_size / 2.0;
 
         let normalized = Vec2::new(screen_size.x, screen_size.y) / screen_size.length();
@@ -48,5 +51,13 @@ impl CircuitElement for DCVoltageSource {
 
     fn get_type(&self) -> ElementType {
         ElementType::DCVoltageSource
+    }
+
+    fn set_nodes(&mut self, nodes: Vec<u32>) {
+        self.nodes = nodes;
+    }
+
+    fn get_nodes(&self) -> Vec<u32> {
+        self.nodes.clone()
     }
 }
