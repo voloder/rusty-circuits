@@ -203,8 +203,8 @@ impl eframe::App for RustyCircuits {
                         self.screen_to_grid_vec(response.drag_delta()), 0, Vec::new(),
                     ));
                 }
-            } else {
-                if self.current_element.is_some() {
+            } else if self.current_element.is_some() {
+                if self.current_element.as_ref().unwrap().size() != Vec2::ZERO {
                     let element = self.current_element.as_ref().unwrap();
 
                     let node1 = (element.pos().x as i32, element.pos().y as i32);
@@ -235,9 +235,8 @@ impl eframe::App for RustyCircuits {
 
                     println!("Node 1: {}, Node 2: {}", node1_id, node2_id);
                     self.elements.insert(id, self.create_element(element.pos(), element.size(), id, [node1_id, node2_id].to_vec()));
-
-                    self.current_element = None;
                 }
+                self.current_element = None;
             }
 
             for element in self.elements.values_mut() {
@@ -257,7 +256,7 @@ impl eframe::App for RustyCircuits {
             for (pos, node) in self.nodes.iter() {
                 let screen_pos = self.grid_to_screen(Pos2::new(pos.0 as f32, pos.1 as f32));
                 if self.debug_options.show_node_numbers {
-                    ui.allocate_ui_at_rect(Rect::from_two_pos(screen_pos+ Vec2::new(5.0, 5.0), screen_pos + Vec2::new(50.0, 50.0)), |ui| {
+                    ui.allocate_ui_at_rect(Rect::from_two_pos(screen_pos + Vec2::new(5.0, 5.0), screen_pos + Vec2::new(50.0, 50.0)), |ui| {
                         ui.label(RichText::new(format!("{}", node.id)).color(Rgba::RED));
                     });
                 }
