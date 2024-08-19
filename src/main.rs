@@ -4,10 +4,6 @@
 )] // hide console window on Windows in release
 #![allow(rustdoc::missing_crate_level_docs)] // it's an example
 
-
-use nalgebra::{LU, Matrix3, Vector3};
-
-
 mod circuit_solver;
 mod components;
 
@@ -20,7 +16,7 @@ use eframe::egui::{FontFamily, Key, Rgba, RichText, WidgetText};
 use eframe::emath::Vec2;
 use eframe::epaint::{Color32, Pos2, Shape, Stroke};
 use egui::{Rect, Sense};
-use nalgebra::DMatrix;
+use nalgebra::{DMatrix, DVector};
 use crate::circuit_solver::simplify_graph;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -72,6 +68,7 @@ impl Clone for Box<dyn CircuitElement> {
         self.clone_box()
     }
 }
+
 
 fn main() -> eframe::Result {
     let options = eframe::NativeOptions {
@@ -296,6 +293,7 @@ impl eframe::App for RustyCircuits {
                 debug_info += format!("Node map: {:?}\n", nodes_map).as_str();
             }
 
+
             if nodes.len() > 0 {
                 let mut admittance_matrix = DMatrix::from_element(nodes.len(), nodes.len(), 0.0);
 
@@ -320,7 +318,6 @@ impl eframe::App for RustyCircuits {
                     }
                 }
 
-                let lu = LU::new(admittance_matrix.clone());
 
                 if self.debug_options.info_admittance_matrix {
                     debug_info += format!("Admittance Matrix:{}\n", admittance_matrix).as_str();
@@ -343,27 +340,25 @@ impl eframe::App for RustyCircuits {
                 if self.debug_options.info_injected_currents {
                     debug_info += format!("Injected currents:{}\n", currents).as_str();
                 }
-                let solution = lu.solve(&currents);
 
-                if let Some(voltages) = solution {
-                    for (index, node) in nodes.into_iter().enumerate() {
-                        let mapped_node_ids = nodes_map.get(&node.id);
-                        // if the node is mapped to another node, also update the voltage of the mapped node
-                        if let Some(mapped_node_ids) = mapped_node_ids {
-                            for mapped_node_id in mapped_node_ids.iter() {
-                                let node = self.nodes.values_mut().find(|n| n.id == *mapped_node_id).unwrap();
-                                node.voltage = voltages[(index, 0)];
-                            }
+                let pseudoinverse = admittance_matrix.clone().pseudo_inverse(1.0e-12).unwrap();
+                let voltages = pseudoinverse * currents;
+
+                for (index, node) in nodes.into_iter().enumerate() {
+                    let mapped_node_ids = nodes_map.get(&node.id);
+                    // if the node is mapped to another node, also update the voltage of the mapped node
+                    if let Some(mapped_node_ids) = mapped_node_ids {
+                        for mapped_node_id in mapped_node_ids.iter() {
+                            let node = self.nodes.values_mut().find(|n| n.id == *mapped_node_id).unwrap();
+                            node.voltage = voltages[(index, 0)];
                         }
+                    }
 
-                        let node = self.nodes.values_mut().find(|n| n.id == node.id).unwrap();
-                        node.voltage = voltages[(index, 0)];
-                    }
-                    if self.debug_options.info_node_voltages {
-                        debug_info += format!("Node voltages:{}\n", voltages).as_str();
-                    }
-                } else {
-                    debug_info += "Matrix is singular\n";
+                    let node = self.nodes.values_mut().find(|n| n.id == node.id).unwrap();
+                    node.voltage = voltages[(index, 0)];
+                }
+                if self.debug_options.info_node_voltages {
+                    debug_info += format!("Node voltages:{}\n", voltages).as_str();
                 }
             }
 
