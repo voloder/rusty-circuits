@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::collections::hash_map::Values;
 use eframe::egui;
 use eframe::egui::{Pos2, Rect, Stroke, Vec2};
+use nalgebra::{DMatrix, DVector};
 use crate::{CircuitElement, ElementType, Node};
 
 #[derive(Clone, Debug)]
@@ -9,13 +10,15 @@ pub struct DCVoltageSource {
     pos: Pos2,
     size: Vec2,
     id: u32,
-    nodes: Vec<u32>
+    nodes: Vec<u32>,
+    voltage: f64,
+    voltage_node: u32
 }
 
 
 impl CircuitElement for DCVoltageSource {
     fn new_boxed(pos: Pos2, size: Vec2, id: u32, nodes: Vec<u32>) -> Box<dyn CircuitElement> {
-        Box::new(DCVoltageSource { pos, size, id, nodes })
+        Box::new(DCVoltageSource { pos, size, id, nodes, voltage: 5.0, voltage_node: 0})
     }
 
     fn draw(&mut self, ui: &mut egui::Ui, stroke: Stroke, grid_step: f32, screen_pos: Pos2, screen_size: Vec2, nodes: &HashMap<(i32, i32), Node>) {
@@ -33,8 +36,6 @@ impl CircuitElement for DCVoltageSource {
 
         ui.painter().line_segment([center + normalized * spacing, screen_pos + screen_size], stroke);
         ui.painter().line_segment([center - normalized * spacing, screen_pos], stroke);
-
-
     }
 
     fn pos(&self) -> Pos2 {
@@ -59,5 +60,25 @@ impl CircuitElement for DCVoltageSource {
 
     fn get_nodes(&self) -> Vec<u32> {
         self.nodes.clone()
+    }
+
+    fn get_voltage_source_count(&self) -> u32 {
+        1
+    }
+
+    fn set_voltage_node(&mut self, node: u32) {
+        self.voltage_node = node;
+    }
+
+    fn stamp_matrix(&self, matrix: &mut DMatrix<f64>, vector: &mut DVector<f64>, nodes: &Vec<Node>) {
+        let node1 = nodes.iter().position(|node| node.id == self.nodes[0]).unwrap();
+        let node2 = nodes.iter().position(|node| node.id == self.nodes[1]).unwrap();
+        let voltage_node = nodes.len() + self.voltage_node as usize;
+
+        matrix[(voltage_node, node1)] -= 1.0;
+        matrix[(voltage_node, node2)] += 1.0;
+        vector[voltage_node] = self.voltage;
+        matrix[(node1, voltage_node)] -= 1.0;
+        matrix[(node2, voltage_node)] += 1.0;
     }
 }

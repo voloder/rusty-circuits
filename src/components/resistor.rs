@@ -1,9 +1,10 @@
 use std::collections::{BTreeMap, HashMap};
 use std::collections::hash_map::Values;
 use eframe::egui;
-use eframe::egui::{Pos2, Rect, Shape, Stroke, Vec2};
+use eframe::egui::{Pos2, Rect, Shape, Stroke, Ui, Vec2};
 use eframe::egui::debug_text::print;
 use eframe::epaint::PathShape;
+use nalgebra::{DMatrix, DVector};
 use crate::{CircuitElement, ElementType, Node};
 
 #[derive(Clone, Debug)]
@@ -72,11 +73,36 @@ impl CircuitElement for Resistor {
         ElementType::Resistor
     }
     fn set_nodes(&mut self, nodes: Vec<u32>) {
-        self.nodes = nodes;
+        self.nodes = nodes
     }
 
     fn get_nodes(&self) -> Vec<u32> {
         self.nodes.clone()
+    }
+
+    fn stamp_matrix(&self, matrix: &mut DMatrix<f64>, vector: &mut DVector<f64>, nodes: &Vec<Node>) {
+        let n1 = nodes.iter().position(|node| node.id == self.nodes[0]).unwrap();
+        let n2 = nodes.iter().position(|node| node.id == self.nodes[1]).unwrap();
+
+        matrix[(n1, n1)] += 1.0 / self.resistance;
+        matrix[(n2, n2)] += 1.0 / self.resistance;
+        matrix[(n1, n2)] -= 1.0 / self.resistance;
+        matrix[(n2, n1)] -= 1.0 / self.resistance;
+    }
+
+    fn draw_window(&mut self, ctx: &egui::Context) -> Option<Pos2> {
+        let window = egui::Window::new(format!("Resistor (id {})", self.id)).show(ctx, |ui| {
+            ui.label(format!("Resistance: {:.2} Ohms", self.resistance));
+            ui.add(egui::Slider::new(&mut self.resistance, 1.0..=1000.0).text("Resistance"));
+        });
+
+        if let Some(window) = window {
+            if window.response.hovered() || window.response.has_focus() {
+                return Some(window.response.rect.center())
+            }
+        }
+
+        None
     }
 }
 

@@ -17,7 +17,7 @@ use eframe::emath::Vec2;
 use eframe::epaint::{Color32, Pos2, Shape, Stroke};
 use egui::{Rect, Sense};
 use nalgebra::{DMatrix, DVector};
-use crate::circuit_solver::simplify_graph;
+use crate::circuit_solver::{simplify_graph};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum ElementType {
@@ -27,6 +27,7 @@ enum ElementType {
     DCVoltageSource,
     CurrentSource,
     Switch,
+    Ground,
 }
 
 
@@ -48,6 +49,16 @@ trait CircuitElement: ElementClone + std::fmt::Debug {
 
     fn set_nodes(&mut self, nodes: Vec<u32>);
     fn get_nodes(&self) -> Vec<u32>;
+    fn stamp_matrix(&self, matrix: &mut DMatrix<f64>, vector: &mut DVector<f64>, nodes: &Vec<Node>) {}
+    fn get_voltage_source_count(&self) -> u32 { 0 }
+    fn set_voltage_node(&mut self, node: u32) {}
+    fn get_node_positions(&self) -> Vec<(i32, i32)> {
+        let node1 = (self.pos().x as i32, self.pos().y as i32);
+        let node2 = (self.pos().x as i32 + self.size().x as i32, self.pos().y as i32 + self.size().y as i32);
+        vec![node1, node2]
+    }
+
+    fn draw_window(&mut self, ctx: &egui::Context) -> Option<Pos2> { None }
 }
 
 trait ElementClone {
@@ -168,6 +179,7 @@ impl eframe::App for RustyCircuits {
                 ui.selectable_value(&mut self.selected_element_type, ElementType::DCVoltageSource, "DC Voltage Source");
                 ui.selectable_value(&mut self.selected_element_type, ElementType::CurrentSource, "Current Source");
                 ui.selectable_value(&mut self.selected_element_type, ElementType::Switch, "Switch");
+                ui.selectable_value(&mut self.selected_element_type, ElementType::Ground, "Ground");
             });
 
             ui.allocate_ui_at_rect(Rect::from_min_size(Pos2::new(ui.available_width() - 180.0, 0.0), Vec2::new(180.0, 150.0)), |ui| {
@@ -203,43 +215,49 @@ impl eframe::App for RustyCircuits {
             } else if self.current_element.is_some() {
                 if self.current_element.as_ref().unwrap().size() != Vec2::ZERO {
                     let element = self.current_element.as_ref().unwrap();
+                    let element_id = self.get_next_element_id();
 
-                    let node1 = (element.pos().x as i32, element.pos().y as i32);
-                    let node2 = (element.pos().x as i32 + element.size().x as i32, element.pos().y as i32 + element.size().y as i32);
-
-                    // find the first unused id
-                    let id = self.get_next_element_id();
-
-                    let node1_id;
-                    if self.nodes.contains_key(&node1) {
-                        let node = self.nodes.get_mut(&node1).unwrap();
-                        node1_id = node.id;
-                        node.connections.insert(id);
-                    } else {
-                        node1_id = self.get_next_node_id();
-                        self.nodes.insert(node1, Node { id: node1_id, voltage: 0.0, connections: BTreeSet::from([id]) });
+                    let node_positions = element.get_node_positions();
+                    let mut node_ids = Vec::new();
+                    for position in node_positions {
+                        if self.nodes.contains_key(&position) {
+                            let node = self.nodes.get_mut(&position).unwrap();
+                            node_ids.push(node.id);
+                            node.connections.insert(element_id);
+                        } else {
+                            let id = self.get_next_node_id();
+                            node_ids.push(id);
+                            self.nodes.insert(position, Node { id: id, voltage: 0.0, connections: BTreeSet::from([element_id]) });
+                        }
                     }
-
-                    let node2_id;
-                    if self.nodes.contains_key(&node2) {
-                        let node = self.nodes.get_mut(&node2).unwrap();
-                        node2_id = node.id;
-                        node.connections.insert(id);
-                    } else {
-                        node2_id = self.get_next_node_id();
-                        self.nodes.insert(node2, Node { id: node2_id, voltage: 0.0, connections: BTreeSet::from([id]) });
-                    }
-
-                    println!("Node 1: {}, Node 2: {}", node1_id, node2_id);
-                    self.elements.insert(id, self.create_element(element.pos(), element.size(), id, [node1_id, node2_id].to_vec()));
+                    println!("{:?}", node_ids);
+                    self.elements.insert(element_id, self.create_element(element.pos(), element.size(), element_id, node_ids));
                 }
                 self.current_element = None;
             }
 
             for element in self.elements.values_mut() {
-                let stroke = Stroke::new(2.0, Color32::WHITE);
                 let screen_pos = element.pos() * self.grid_step + self.offset;
                 let screen_size = element.size() * self.grid_step;
+                let window_pos = element.draw_window(ctx);
+
+                let stroke;
+
+                if let Some(window_pos) = window_pos {
+                    stroke = Stroke::new(2.0, Color32::GREEN);
+                    let arrow_stroke = Stroke::new(1.0, Color32::GREEN);
+
+                    let center = screen_pos + screen_size / 2.0;
+                    let normalized = (center - window_pos).normalized();
+                    let end = center - normalized * 20.0;
+
+                    let normal = Vec2::new(normalized.y, -normalized.x);
+                    ui.painter().line_segment([end, end - normalized * 6.0 + normal * 3.0], arrow_stroke);
+                    ui.painter().line_segment([end, end - normalized * 6.0 - normal * 3.0], arrow_stroke);
+                    ui.painter().line_segment([window_pos, end], arrow_stroke);
+                } else {
+                    stroke = Stroke::new(2.0, Color32::WHITE);
+                }
 
                 element.draw(ui, stroke, self.grid_step, screen_pos, screen_size, &self.nodes);
 
@@ -281,7 +299,8 @@ impl eframe::App for RustyCircuits {
             let mut nodes: Vec<_> = self.nodes.values().collect::<Vec<&Node>>().into_iter().cloned().collect();
             let mut elements = self.elements.clone();
             let mut simplification_info = String::new();
-
+            // ground node
+            nodes.insert(0, Node { id: 0, voltage: 0.0, connections: BTreeSet::new() });
             let nodes_map = simplify_graph(&mut nodes, &mut elements, &mut simplification_info);
             if self.debug_options.info_simplfication {
                 debug_info += "------ Simplifying nodes ------\n";
@@ -294,49 +313,29 @@ impl eframe::App for RustyCircuits {
             }
 
 
-            if nodes.len() > 0 {
-                let mut admittance_matrix = DMatrix::from_element(nodes.len(), nodes.len(), 0.0);
-
-                for (y, node) in nodes.iter().enumerate() {
-
-                    // diagonal elements: sum of self-admittances
-                    for connection in node.connections.iter() {
-                        let element = self.elements.get(connection).unwrap();
-                        admittance_matrix[(y, y)] += element.get_admittance();
-                    }
-
-                    // off-diagonal elements: -admittance for shared elements
-                    for (x, other_node) in nodes.iter().enumerate() {
-                        if x == y {
-                            continue;
-                        }
-                        let shared_connections: Vec<_> = node.connections.intersection(&other_node.connections).collect();
-                        for connection in shared_connections {
-                            let element = self.elements.get(connection).unwrap();
-                            admittance_matrix[(x, y)] -= element.get_admittance();
-                        }
-                    }
+            let mut voltage_nodes: u32 = 0;
+            for (id, element) in elements.iter_mut() {
+                if element.get_voltage_source_count() > 0 {
+                    element.set_voltage_node(voltage_nodes);
+                    voltage_nodes += element.get_voltage_source_count();
                 }
+            }
 
+            // 1 for the ground node
+            let mut matrix_size = nodes.len() + voltage_nodes as usize;
+
+            if matrix_size > 1 {
+                let mut admittance_matrix = DMatrix::from_element(matrix_size, matrix_size, 0.0);
+                let mut currents = DVector::<f64>::zeros(matrix_size);
+
+                for element in elements.values() {
+                    element.stamp_matrix(&mut admittance_matrix, &mut currents, &nodes);
+                }
 
                 if self.debug_options.info_admittance_matrix {
                     debug_info += format!("Admittance Matrix:{}\n", admittance_matrix).as_str();
                 }
 
-                let mut currents = DMatrix::<f64>::zeros(admittance_matrix.nrows(), 1);
-
-                for element in elements.values() {
-                    let element_nodes = element.get_nodes();
-                    if element.get_type() == ElementType::CurrentSource && element_nodes.len() > 1 {
-                        let node1_index = nodes.iter().position(|node| node.id == element_nodes[0]).unwrap();
-                        let node2_index = nodes.iter().position(|node| node.id == element_nodes[1]).unwrap();
-
-                        let current = 1.0;
-
-                        currents[(node2_index, 0)] += current;
-                        currents[(node1_index, 0)] -= current;
-                    }
-                }
                 if self.debug_options.info_injected_currents {
                     debug_info += format!("Injected currents:{}\n", currents).as_str();
                 }
@@ -344,7 +343,13 @@ impl eframe::App for RustyCircuits {
                 let pseudoinverse = admittance_matrix.clone().pseudo_inverse(1.0e-12).unwrap();
                 let voltages = pseudoinverse * currents;
 
+                // map the nodes back to the original nodes
                 for (index, node) in nodes.into_iter().enumerate() {
+                    // skip the ground node
+                    if node.id == 0 {
+                        continue;
+                    }
+
                     let mapped_node_ids = nodes_map.get(&node.id);
                     // if the node is mapped to another node, also update the voltage of the mapped node
                     if let Some(mapped_node_ids) = mapped_node_ids {
@@ -378,6 +383,7 @@ impl RustyCircuits {
             ElementType::DCVoltageSource => components::dc_voltage_source::DCVoltageSource::new_boxed(pos, size, id, nodes),
             ElementType::CurrentSource => components::current_source::CurrentSource::new_boxed(pos, size, id, nodes),
             ElementType::Switch => components::circuit_switch::Switch::new_boxed(pos, size, id, nodes),
+            ElementType::Ground => components::ground::Ground::new_boxed(pos, size, id, nodes),
         }
     }
 
@@ -394,8 +400,8 @@ impl RustyCircuits {
     }
 
     fn get_next_element_id(&self) -> u32 {
-        let mut id = 0;
-        for i in 0.. {
+        let mut id = 1;
+        for i in 1.. {
             if !self.elements.contains_key(&(i as u32)) {
                 id = i as u32;
                 break;
@@ -405,8 +411,8 @@ impl RustyCircuits {
     }
 
     fn get_next_node_id(&self) -> u32 {
-        let mut id = 0;
-        for i in 0.. {
+        let mut id = 1;
+        for i in 1.. {
             if !self.nodes.values().any(|node| node.id == i as u32) {
                 id = i as u32;
                 break;

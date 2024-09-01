@@ -4,3 +4,4 @@ pub mod resistor;
 pub mod wire;
 pub mod current_source;
 pub mod circuit_switch;
+pub mod ground;
