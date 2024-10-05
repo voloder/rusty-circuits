@@ -25,10 +25,17 @@ impl CircuitElement for Ground {
         let normalized = Vec2::new(screen_size.x, screen_size.y) / screen_size.length();
         let normal = Vec2::new(screen_size.y, -screen_size.x) / screen_size.length();
 
-        let spacing = grid_step * 0.125;
-        let length = grid_step * 0.5;
-        let half_length = grid_step * 0.25;
+        let spacing = grid_step * 0.2;
+        let length1 = grid_step * 0.5;
+        let length2 = grid_step * 0.3;
+        let length3 = grid_step * 0.1;
 
+
+        let end = screen_pos + screen_size;
+
+        ui.painter().line_segment([end - normal * length1, end + normal * length1], stroke);
+        ui.painter().line_segment([end - normal * length2 + normalized * spacing, end + normal * length2 + normalized * spacing], stroke);
+        ui.painter().line_segment([end - normal * length3 + normalized * spacing * 2.0, end + normal * length3 + normalized * spacing * 2.0], stroke);
 
         ui.painter().line_segment([screen_pos, screen_pos + screen_size], stroke);
     }

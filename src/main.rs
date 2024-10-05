@@ -6,6 +6,7 @@
 
 mod circuit_solver;
 mod components;
+mod node;
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::collections::hash_map::Values;
@@ -252,8 +253,8 @@ impl eframe::App for RustyCircuits {
                     let end = center - normalized * 20.0;
 
                     let normal = Vec2::new(normalized.y, -normalized.x);
-                    ui.painter().line_segment([end, end - normalized * 6.0 + normal * 3.0], arrow_stroke);
-                    ui.painter().line_segment([end, end - normalized * 6.0 - normal * 3.0], arrow_stroke);
+                    //ui.painter().line_segment([end, end - normalized * 6.0 + normal * 3.0], arrow_stroke);
+                    //ui.painter().line_segment([end, end - normalized * 6.0 - normal * 3.0], arrow_stroke);
                     ui.painter().line_segment([window_pos, end], arrow_stroke);
                 } else {
                     stroke = Stroke::new(2.0, Color32::WHITE);

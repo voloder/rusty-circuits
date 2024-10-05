@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, HashMap};
 use std::collections::hash_map::Values;
 use eframe::egui;
-use eframe::egui::{Pos2, Rect, Stroke, Vec2};
+use eframe::egui::{Frame, Pos2, Rect, Stroke, Vec2};
 use nalgebra::{DMatrix, DVector};
 use crate::{CircuitElement, ElementType, Node};
 
@@ -12,13 +12,14 @@ pub struct DCVoltageSource {
     id: u32,
     nodes: Vec<u32>,
     voltage: f64,
-    voltage_node: u32
+    voltage_node: u32,
+    window_hovered: bool,
 }
 
 
 impl CircuitElement for DCVoltageSource {
     fn new_boxed(pos: Pos2, size: Vec2, id: u32, nodes: Vec<u32>) -> Box<dyn CircuitElement> {
-        Box::new(DCVoltageSource { pos, size, id, nodes, voltage: 5.0, voltage_node: 0})
+        Box::new(DCVoltageSource { pos, size, id, nodes, voltage: 5.0, voltage_node: 0, window_hovered: false})
     }
 
     fn draw(&mut self, ui: &mut egui::Ui, stroke: Stroke, grid_step: f32, screen_pos: Pos2, screen_size: Vec2, nodes: &HashMap<(i32, i32), Node>) {
@@ -80,5 +81,32 @@ impl CircuitElement for DCVoltageSource {
         vector[voltage_node] = self.voltage;
         matrix[(node1, voltage_node)] -= 1.0;
         matrix[(node2, voltage_node)] += 1.0;
+    }
+
+
+    fn draw_window(&mut self, ctx: &egui::Context) -> Option<Pos2> {
+        let mut window = egui::Window::new(format!("DC Voltage Source (id {})", self.id));
+
+        if self.window_hovered {
+            window = window.frame(
+                Frame::window(&ctx.style()).stroke(
+                    Stroke::new(1.0, egui::Color32::GREEN),
+                ),
+            );
+        }
+
+        let window_response = window.show(ctx, |ui| {
+            ui.label(format!("Voltage: {:.2} V", self.voltage));
+            ui.add(egui::Slider::new(&mut self.voltage, 0.0..=1000.0).text("Voltage"));
+        });
+
+        if let Some(window) = window_response {
+            if window.response.hovered() || window.response.has_focus() {
+                self.window_hovered = true;
+                return Some(window.response.rect.center());
+            }
+        }
+        self.window_hovered = false;
+        None
     }
 }

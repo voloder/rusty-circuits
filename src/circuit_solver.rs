@@ -31,22 +31,18 @@ pub fn simplify_graph(
             if nodes_to_remove.contains(&node.id) {
                 continue;
             }
-
             for j in 1..nodes.len() {
                 if i == j {
                     continue;
                 }
-
                 let other = &nodes[j];
                 if nodes_to_remove.contains(&other.id) {
                     continue;
                 }
-
                 let common_connections: Vec<u32> = node.connections.iter()
                     .filter(|&conn| other.connections.contains(conn))
                     .copied()
                     .collect();
-
                 for connection in common_connections {
                     if let Some(element) = elements.get(&connection) {
                         if element.shorted() {

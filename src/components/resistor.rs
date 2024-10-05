@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, HashMap};
 use std::collections::hash_map::Values;
 use eframe::egui;
-use eframe::egui::{Pos2, Rect, Shape, Stroke, Ui, Vec2};
+use eframe::egui::{Frame, Pos2, Rect, Shape, Stroke, Ui, Vec2};
 use eframe::egui::debug_text::print;
 use eframe::epaint::PathShape;
 use nalgebra::{DMatrix, DVector};
@@ -14,12 +14,13 @@ pub struct Resistor {
     size: Vec2,
     resistance: f64,
     id: u32,
-    nodes: Vec<u32>
+    nodes: Vec<u32>,
+    window_hovered: bool,
 }
 
 impl CircuitElement for Resistor {
     fn new_boxed(pos: Pos2, size: Vec2, id: u32, nodes: Vec<u32>) -> Box<dyn CircuitElement> {
-        Box::new(Resistor { pos, size, id, resistance: 10.0, nodes })
+        Box::new(Resistor { pos, size, id, resistance: 10.0, nodes, window_hovered: false })
     }
 
     fn draw(&mut self, ui: &mut egui::Ui, stroke: Stroke, grid_step: f32, screen_pos: Pos2, screen_size: Vec2, nodes: &HashMap<(i32, i32), Node>) {
@@ -91,17 +92,29 @@ impl CircuitElement for Resistor {
     }
 
     fn draw_window(&mut self, ctx: &egui::Context) -> Option<Pos2> {
-        let window = egui::Window::new(format!("Resistor (id {})", self.id)).show(ctx, |ui| {
+        let mut window = egui::Window::new(format!("Resistor (id {})", self.id));
+
+        if self.window_hovered {
+            window = window.frame(
+                Frame::window(&ctx.style()).stroke(
+                    Stroke::new(1.0, egui::Color32::GREEN),
+                ),
+            );
+        }
+
+
+        let window_response = window.show(ctx, |ui| {
             ui.label(format!("Resistance: {:.2} Ohms", self.resistance));
             ui.add(egui::Slider::new(&mut self.resistance, 1.0..=1000.0).text("Resistance"));
         });
 
-        if let Some(window) = window {
+        if let Some(window) = window_response {
             if window.response.hovered() || window.response.has_focus() {
-                return Some(window.response.rect.center())
+                self.window_hovered = true;
+                return Some(window.response.rect.center());
             }
         }
-
+        self.window_hovered = false;
         None
     }
 }
